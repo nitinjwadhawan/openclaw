@@ -4,7 +4,6 @@ import path from "node:path";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope-config.js";
 import type { OpenClawConfigWithLegacyRoster } from "../config/legacy.roster.js";
 import type { AgentEntryConfig } from "../config/types.agents.js";
-import { hasAvatarUriScheme, isWindowsAbsolutePath } from "../shared/avatar-policy.js";
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
 import { resolveUserPath } from "./home-dir.js";
 import { tryListenOnPort } from "./ports-probe.js";
@@ -79,15 +78,16 @@ function isolatedConfig(
     (migrationPolicy === "startup-only"
       ? undefined
       : Object.fromEntries((copied.agents?.list ?? []).map(({ id, ...agent }) => [id, agent])));
-  // Validation confines local avatars to the agent workspace. Rebase them with
-  // the workspace so the candidate accepts exactly the avatars the source did.
+  // Validation confines local avatars to the agent workspace. Relative avatars
+  // already follow it; rebase absolute ones so the candidate accepts exactly
+  // what the source did. The ./ prefix keeps a "~x" or "x:" basename local.
   const projectAvatar = (id: string, avatar: string) => {
     const value = avatar.trim();
-    if (value.startsWith("~") || (hasAvatarUriScheme(value) && !isWindowsAbsolutePath(value))) {
+    if (!path.isAbsolute(value)) {
       return avatar;
     }
-    const sourceWorkspace = resolveAgentWorkspaceDir(config, id, sourceEnv);
-    return path.relative(sourceWorkspace, path.resolve(sourceWorkspace, value));
+    const relative = path.relative(resolveAgentWorkspaceDir(config, id, sourceEnv), value);
+    return path.isAbsolute(relative) ? relative : `.${path.sep}${relative}`;
   };
   const isolateAgent = (id: string, agent: AgentEntryConfig): AgentEntryConfig => ({
     ...agent,
