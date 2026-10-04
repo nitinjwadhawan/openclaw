@@ -370,4 +370,73 @@ describe("channel ingress drain lanes", () => {
       }
     });
   });
+
+  it("replays a claim waiting on its admission turn in order after the drain shuts down", async () => {
+    await withTempState(async (stateDir) => {
+      const queue = createTestIngressQueue(stateDir);
+      let interruptedWait: Promise<boolean> | undefined;
+      const shutDown = createChannelIngressDrain<Payload>({
+        queue,
+        deferredLaneOccupancy: "release",
+        deriveLaneKey: () => "chat",
+        dispatchClaimedEvent: (event, lifecycle) => {
+          if (event.id === "later") {
+            interruptedWait = lifecycle.admissionTurn
+              ?.wait()
+              .then(() => lifecycle.abortSignal.aborted);
+          }
+          return { kind: "deferred" };
+        },
+      });
+      for (const [index, id] of ["earlier", "later"].entries()) {
+        await queue.enqueue(id, { text: id }, { receivedAt: index });
+        expect(await shutDown.drainOnce()).toEqual({ started: 1 });
+        await shutDown.waitForIdle();
+      }
+      shutDown.dispose();
+      // Shutdown, not admission, ended the wait; both claims stay held for recovery.
+      expect(await interruptedWait).toBe(true);
+      expect((await queue.listClaims()).map((claim) => claim.id).toSorted()).toEqual([
+        "earlier",
+        "later",
+      ]);
+
+      const order: string[] = [];
+      let earlier: ChannelIngressDispatchLifecycle | undefined;
+      let laterAdmitted: Promise<void> | undefined;
+      const replay = createChannelIngressDrain<Payload>({
+        queue,
+        deferredLaneOccupancy: "release",
+        deriveLaneKey: () => "chat",
+        dispatchClaimedEvent: (event, lifecycle) => {
+          if (event.id === "earlier") {
+            earlier = lifecycle;
+          } else {
+            laterAdmitted = lifecycle.admissionTurn?.wait().then(async () => {
+              order.push("later");
+              await lifecycle.onAdopted();
+            });
+          }
+          return { kind: "deferred" };
+        },
+      });
+      try {
+        expect(await replay.drainOnce()).toEqual({ started: 1 });
+        await replay.waitForIdle();
+        expect(await replay.drainOnce()).toEqual({ started: 1 });
+        await replay.waitForIdle();
+        if (!earlier || !laterAdmitted) {
+          throw new Error("Expected both recovered claims to reach their channel buffers");
+        }
+        order.push("earlier");
+        await earlier.onAdopted();
+        await laterAdmitted;
+
+        expect(order).toEqual(["earlier", "later"]);
+        expect(await queue.listClaims()).toEqual([]);
+      } finally {
+        replay.dispose();
+      }
+    });
+  });
 });
