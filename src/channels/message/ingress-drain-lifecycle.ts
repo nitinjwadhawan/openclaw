@@ -1,15 +1,24 @@
 import type { ChannelIngressQueueRecord } from "./ingress-queue.types.js";
 
+/** Options for waiting on one admission turn. */
+export type ChannelIngressAdmissionWaitOptions = {
+  /**
+   * Claims that form one reply turn: the wait starts from the earliest of them,
+   * so members coalesced across other senders never wait on each other.
+   */
+  batch?: readonly ChannelIngressAdmissionTurn[];
+  /** Called once, before blocking, when an earlier claim still holds the turn. */
+  onBlocked?: () => void;
+};
+
 /** Drain-owned position of one claim in its lane's downstream admission order. */
 export type ChannelIngressAdmissionTurn = {
   /**
    * Resolves once every same-lane claim dispatched before this turn has been
    * admitted downstream (onDeferred / onAdopted) or settled, or once this claim
-   * is aborted. Claims in `batch` are one turn: the wait starts from the
-   * earliest of them, so members coalesced across other senders never wait on
-   * each other.
+   * is aborted.
    */
-  wait: (batch?: readonly ChannelIngressAdmissionTurn[]) => Promise<void>;
+  wait: (options?: ChannelIngressAdmissionWaitOptions) => Promise<void>;
 };
 
 /** Full pre-adoption -> adoption ownership lifecycle for one claimed event. */
@@ -23,6 +32,12 @@ export type ChannelIngressDispatchLifecycle = {
    * reply admission stays behind earlier claims still buffered or preflighting.
    */
   admissionTurn?: ChannelIngressAdmissionTurn;
+  /**
+   * Channel-owned: the turn is blocked behind earlier claims. Release synchronous
+   * holds (a debounce key, a transport handler) so later same-lane input can still
+   * reach channel buffers; the claim keeps its admission-order place.
+   */
+  onAdmissionWait?: () => void;
   /**
    * Same-lane rows admitted but not yet handed off, excluding this event.
    * Lets channel buffers that span lane rows wait for input that is already durable.
@@ -69,9 +84,16 @@ export function combineIngressAdmissionTurns(
     return members[0];
   }
   return {
-    wait: async (batch = []) => {
-      const joined = [...members, ...batch];
-      await Promise.all(members.map((turn) => turn.wait(joined)));
+    wait: async (options = {}) => {
+      const batch = [...members, ...(options.batch ?? [])];
+      let blocked = false;
+      const onBlocked = () => {
+        if (!blocked) {
+          blocked = true;
+          options.onBlocked?.();
+        }
+      };
+      await Promise.all(members.map((turn) => turn.wait({ batch, onBlocked })));
     },
   };
 }
@@ -93,6 +115,7 @@ export function bindIngressLifecycleToReplyOptions(lifecycle: ChannelIngressDisp
       onAbandoned: lifecycle.onAbandoned,
       abortSignal: lifecycle.abortSignal,
       ...(lifecycle.admissionTurn ? { admissionTurn: lifecycle.admissionTurn } : {}),
+      ...(lifecycle.onAdmissionWait ? { onAdmissionWait: lifecycle.onAdmissionWait } : {}),
     },
   };
 }

@@ -137,7 +137,16 @@ wait, just as control commands skip debouncing.
 A turn that consumes several claims is one batch: its wait starts from the
 earliest member, so members coalesced across another sender never wait on each
 other. `fanInChannelIngressLifecycles` combines its members' turns this way;
-code that builds its own batch passes every member to `turn.wait(batchTurns)`.
+code that builds its own batch passes every member as
+`turn.wait({ batch: batchTurns })`.
+
+When the wait actually blocks, the kernel calls the turn's
+`onAdmissionWait()` once before waiting. A channel uses it to release
+synchronous holds, such as a debounce key or a transport update handler, so a
+later member of the earlier sender's burst can still reach its buffer instead of
+queuing behind the waiting turn. The claim keeps its place in the admission
+order. The shared inbound debouncer's `createFlush` lifecycle provides this hook,
+and `bindIngressLifecycleToReplyOptions` forwards it.
 
 A turn's wait depends only on earlier claims reaching admission, so a channel
 must report `onDeferred` before it makes a claim wait on a later turn (for

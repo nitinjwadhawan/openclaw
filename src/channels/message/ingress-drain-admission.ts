@@ -1,5 +1,8 @@
 import { createDeferredCore } from "../../shared/deferred.js";
-import type { ChannelIngressAdmissionTurn } from "./ingress-drain-lifecycle.js";
+import type {
+  ChannelIngressAdmissionTurn,
+  ChannelIngressAdmissionWaitOptions,
+} from "./ingress-drain-lifecycle.js";
 import { holdsAdmissionTurn, type ActiveHandlerState } from "./ingress-drain-state.js";
 
 /**
@@ -28,9 +31,9 @@ export function createIngressAdmissionTurns<TPayload, TMetadata>(
     }
   };
 
-  const wait = async (state: State, batch: readonly ChannelIngressAdmissionTurn[]) => {
+  const wait = async (state: State, options: ChannelIngressAdmissionWaitOptions) => {
     const members = new Set<State>([state]);
-    for (const turn of batch) {
+    for (const turn of options.batch ?? []) {
       const member = owners.get(turn);
       if (member?.laneKey === state.laneKey) {
         members.add(member);
@@ -50,6 +53,7 @@ export function createIngressAdmissionTurns<TPayload, TMetadata>(
     if (isReady()) {
       return;
     }
+    options.onBlocked?.();
     const turn = createDeferredCore();
     waiters.add({ isReady, resolve: turn.resolve });
     await turn.promise;
@@ -61,7 +65,7 @@ export function createIngressAdmissionTurns<TPayload, TMetadata>(
       state.dispatchSeq = nextSeq++;
       // Abort covers supersede, guillotine, lease loss, and disposal transitions.
       state.abortController.signal.addEventListener("abort", notify, { once: true });
-      const turn: ChannelIngressAdmissionTurn = { wait: (batch = []) => wait(state, batch) };
+      const turn: ChannelIngressAdmissionTurn = { wait: (options = {}) => wait(state, options) };
       owners.set(turn, state);
       return turn;
     },

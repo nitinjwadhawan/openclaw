@@ -117,10 +117,13 @@ describe("prepared channel turn lifecycle", () => {
     const events: string[] = [];
     const waitStarted = createDeferred();
     const earlierAdmitted = createDeferred();
+    const onAdmissionWait = vi.fn();
     const turnAdoptionLifecycle = {
       onAdopted: vi.fn(async () => undefined),
+      onAdmissionWait,
       admissionTurn: {
-        wait: () => {
+        wait: (options?: { onBlocked?: () => void }) => {
+          options?.onBlocked?.();
           waitStarted.resolve();
           return earlierAdmitted.promise;
         },
@@ -132,6 +135,8 @@ describe("prepared channel turn lifecycle", () => {
     const result = run(turn, { turnAdoptionLifecycle });
 
     await waitStarted.promise;
+    // The channel may release its synchronous holds while the turn keeps its place.
+    expect(onAdmissionWait).toHaveBeenCalledOnce();
     expect(events).toEqual([]);
     expect(turn.runDispatch).not.toHaveBeenCalled();
     earlierAdmitted.resolve();

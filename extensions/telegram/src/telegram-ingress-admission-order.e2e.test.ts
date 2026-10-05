@@ -62,9 +62,9 @@ vi.mock("openclaw/plugin-sdk/channel-inbound", async (importOriginal) => {
             if (!lifecycle || !admissionTurn) {
               return plan;
             }
-            const wait = async () => {
+            const wait = async (options?: { onBlocked?: () => void }) => {
               admissionWaits.started += 1;
-              await admissionTurn.wait();
+              await admissionTurn.wait(options);
             };
             return {
               ...plan,
@@ -127,6 +127,7 @@ const {
   runtimeErrors,
 } = await import("./telegram-ingress-coalescing-fixture.test-support.js");
 const { holdFirstDownstreamTurn } = createDownstreamTurnFixture(downstreamTurns);
+const { openTelegramIngressQueue } = await import("./telegram-ingress-spool.js");
 
 describe("Telegram durable ingress admission order", () => {
   const originalStateDir = process.env.OPENCLAW_STATE_DIR;
@@ -215,6 +216,41 @@ describe("Telegram durable ingress admission order", () => {
       await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2));
       await monitor.waitForDeferredClaims();
       await assertSpoolTombstoned({ stateDir, updateIds: [1_701, 1_702] });
+    } finally {
+      forwardWindow.restore();
+    }
+  });
+
+  it("keeps an earlier sender's forward burst coalescing while a later sender waits", async () => {
+    const resources = await createIngressMonitor(stateDir);
+    activeResources.push(resources);
+    const { monitor } = resources;
+    const queue = openTelegramIngressQueue({ stateDir });
+    const forwardWindow = holdForwardWindow();
+    try {
+      monitor.start();
+      const first = forwardedTextUpdate({ updateId: 1_801, messageId: 1, text: "Ada forward 1" });
+      await monitor.admit(inSharedGroup(first, groupSenders.ada));
+      await monitor.waitForIdle();
+      const reply = textUpdate({ updateId: 1_802, messageId: 2, text: "Bo reply" });
+      await monitor.admit(inSharedGroup(reply, groupSenders.bo));
+      await vi.waitFor(() => expect(admissionWaits.started).toBe(1), { timeout: 5_000 });
+
+      // Bo's held turn must not keep the chat lane: Ada's next member reaches her buffer.
+      const second = forwardedTextUpdate({ updateId: 1_803, messageId: 3, text: "Ada forward 2" });
+      await monitor.admit(inSharedGroup(second, groupSenders.ada));
+      await vi.waitFor(async () => expect(await queue.listPending({ limit: "all" })).toEqual([]), {
+        timeout: 5_000,
+      });
+      forwardWindow.flush();
+
+      await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2));
+      const [adaTurn, boTurn] = downstreamTurns.mock.calls.map(([turn]) => turn.RawBody);
+      expect(adaTurn).toContain("Ada forward 1");
+      expect(adaTurn).toContain("Ada forward 2");
+      expect(boTurn).toBe("Bo reply");
+      await monitor.waitForDeferredClaims();
+      await assertSpoolTombstoned({ stateDir, updateIds: [1_801, 1_802, 1_803] });
     } finally {
       forwardWindow.restore();
     }

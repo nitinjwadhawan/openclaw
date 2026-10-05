@@ -108,7 +108,9 @@ export type TurnAdoptionLifecycle = {
    * and dispatching, so a later same-lane claim cannot overtake one that is
    * still buffered or preflighting. Explicit command turns skip it.
    */
-  admissionTurn?: { wait: () => Promise<void> };
+  admissionTurn?: { wait: (options?: { onBlocked?: () => void }) => Promise<void> };
+  /** Called when the admission wait blocks, so the channel can release synchronous holds. */
+  onAdmissionWait?: () => void;
   onAdopted: () => void | Promise<void>;
   /** Return false to reject followup enqueue. */
   onDeferred?: () => boolean | void;

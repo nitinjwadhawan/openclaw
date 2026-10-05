@@ -393,6 +393,7 @@ export const createTelegramMessageProcessor = (
             abortSignal: turnAbortSignal,
             // Buffers and preflight run per sender; reply admission keeps spool order.
             ...(participant.admissionTurn ? { admissionTurn: participant.admissionTurn } : {}),
+            onAdmissionWait: () => turnContext.onTurnAdmissionWait?.(),
             onAdopted: async () => {
               if (adopted) {
                 return;

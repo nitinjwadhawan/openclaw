@@ -117,9 +117,16 @@ function joinTelegramAdmissionTurns(
     return turns[0];
   }
   return {
-    wait: async (batch = []) => {
-      const joined = [...turns, ...batch];
-      await Promise.all(turns.map((turn) => turn.wait(joined)));
+    wait: async (options = {}) => {
+      const batch = [...turns, ...(options.batch ?? [])];
+      let blocked = false;
+      const onBlocked = () => {
+        if (!blocked) {
+          blocked = true;
+          options.onBlocked?.();
+        }
+      };
+      await Promise.all(turns.map((turn) => turn.wait({ batch, onBlocked })));
     },
   };
 }
