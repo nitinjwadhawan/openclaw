@@ -85,4 +85,17 @@ describe("Windows candidate avatar projection", () => {
       true,
     );
   });
+
+  it.each([
+    [String.raw`\\?\C:\Users\me\clawd`, String.raw`C:\Users\me\clawd\a.png`, String.raw`.\a.png`],
+    [String.raw`C:\Users\me\clawd`, String.raw`..\clawd\a.png`, String.raw`.\a.png`],
+    [
+      String.raw`C:\Users\me\clawd`,
+      String.raw`\Users\me\main\a.png`,
+      String.raw`C:\Users\me\main\a.png`,
+    ],
+  ])("projects %s avatar %s as %s", (workspace, avatar, expected) => {
+    vi.spyOn(process, "cwd").mockReturnValue(String.raw`D:\work`);
+    expect(resolveUpdateCandidateAvatar(workspace, avatar)).toBe(expected);
+  });
 });

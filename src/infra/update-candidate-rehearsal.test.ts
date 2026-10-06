@@ -129,6 +129,15 @@ it("keeps workspace-confined avatars as valid as the serving config", async () =
           workspace: workspace("other"),
           identity: { avatar: `${workspace("renamed")}/a.png` },
         },
+        aliased: { workspace: workspace("main"), identity: { avatar: "../main/a.png" } },
+        climbed: {
+          workspace: workspace("climbed"),
+          identity: { avatar: "../../workspaces/climbed/a.png" },
+        },
+        relativeRenamed: {
+          workspace: workspace("other"),
+          identity: { avatar: "../relativeRenamed/a.png" },
+        },
       },
     },
   };
@@ -139,6 +148,7 @@ it("keeps workspace-confined avatars as valid as the serving config", async () =
   expect(issuePaths(config)).toEqual([
     "agents.entries.escaped.identity.avatar",
     "agents.entries.renamed.identity.avatar",
+    "agents.entries.relativeRenamed.identity.avatar",
   ]);
 
   const rehearsal = await prepareUpdateCandidateRehearsal({
