@@ -132,3 +132,25 @@ export function resolveUpdateCandidatePluginSourcePath(
     ? source
     : undefined;
 }
+
+/**
+ * Validation confines local avatars to the agent workspace, which the candidate
+ * relocates. Relative avatars already follow it; rebase absolute ones admitted
+ * by the source workspace so the candidate accepts exactly what the source did.
+ */
+export function resolveUpdateCandidateAvatar(sourceWorkspaceDir: string, avatar: string): string {
+  const value = avatar.trim();
+  if (!path.isAbsolute(value)) {
+    return avatar;
+  }
+  // Resolve against the workspace like validation does: a drive-less Windows
+  // root takes the workspace drive, not the process drive.
+  const workspaceRoot = path.resolve(sourceWorkspaceDir);
+  const resolved = path.resolve(workspaceRoot, value);
+  if (!isPathInside(workspaceRoot, resolved)) {
+    // Its relative spelling could land back inside the relocated workspace.
+    return avatar;
+  }
+  // The ./ prefix keeps a "~x" or "x:" basename local.
+  return `.${path.sep}${path.relative(workspaceRoot, resolved)}`;
+}

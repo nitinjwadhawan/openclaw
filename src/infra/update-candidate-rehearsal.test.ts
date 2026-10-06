@@ -124,6 +124,11 @@ it("keeps workspace-confined avatars as valid as the serving config", async () =
         },
         remote: { identity: { avatar: "https://example.invalid/a.png" } },
         escaped: { workspace: workspace("escaped"), identity: { avatar: `${root}/a.png` } },
+        // The candidate names workspaces by id, so ../<id> would land back inside it.
+        renamed: {
+          workspace: workspace("other"),
+          identity: { avatar: `${workspace("renamed")}/a.png` },
+        },
       },
     },
   };
@@ -131,7 +136,10 @@ it("keeps workspace-confined avatars as valid as the serving config", async () =
     const result = validateConfigObject(cfg);
     return result.ok ? [] : result.issues.map((issue) => issue.path);
   };
-  expect(issuePaths(config)).toEqual(["agents.entries.escaped.identity.avatar"]);
+  expect(issuePaths(config)).toEqual([
+    "agents.entries.escaped.identity.avatar",
+    "agents.entries.renamed.identity.avatar",
+  ]);
 
   const rehearsal = await prepareUpdateCandidateRehearsal({
     config,

@@ -8,7 +8,10 @@ import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths
 import { resolveUserPath } from "./home-dir.js";
 import { tryListenOnPort } from "./ports-probe.js";
 import { SUPERVISOR_HINT_ENV_VARS } from "./supervisor-markers.js";
-import { resolveUpdateCandidateStatePath } from "./update-candidate-paths.js";
+import {
+  resolveUpdateCandidateAvatar,
+  resolveUpdateCandidateStatePath,
+} from "./update-candidate-paths.js";
 import type { UpdateCandidatePluginCodeLink } from "./update-candidate-plugin-code-links.js";
 import { prepareUpdateCandidateStateSnapshot } from "./update-candidate-snapshot.js";
 import {
@@ -78,22 +81,19 @@ function isolatedConfig(
     (migrationPolicy === "startup-only"
       ? undefined
       : Object.fromEntries((copied.agents?.list ?? []).map(({ id, ...agent }) => [id, agent])));
-  // Validation confines local avatars to the agent workspace. Relative avatars
-  // already follow it; rebase absolute ones so the candidate accepts exactly
-  // what the source did. The ./ prefix keeps a "~x" or "x:" basename local.
-  const projectAvatar = (id: string, avatar: string) => {
-    const value = avatar.trim();
-    if (!path.isAbsolute(value)) {
-      return avatar;
-    }
-    const relative = path.relative(resolveAgentWorkspaceDir(config, id, sourceEnv), value);
-    return path.isAbsolute(relative) ? relative : `.${path.sep}${relative}`;
-  };
   const isolateAgent = (id: string, agent: AgentEntryConfig): AgentEntryConfig => ({
     ...agent,
     // Pre-Doctor input can be malformed; validation reports non-string avatars.
     ...(typeof agent.identity?.avatar === "string"
-      ? { identity: { ...agent.identity, avatar: projectAvatar(id, agent.identity.avatar) } }
+      ? {
+          identity: {
+            ...agent.identity,
+            avatar: resolveUpdateCandidateAvatar(
+              resolveAgentWorkspaceDir(config, id, sourceEnv),
+              agent.identity.avatar,
+            ),
+          },
+        }
       : {}),
     workspace: path.join(workspace, id),
     cwd: path.join(workspace, id),

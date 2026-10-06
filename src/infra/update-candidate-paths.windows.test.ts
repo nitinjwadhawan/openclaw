@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockProcessPlatform } from "../test-utils/vitest-spies.js";
 import { isPathInside } from "./path-guards.js";
 import {
+  resolveUpdateCandidateAvatar,
   resolveUpdateCandidateStateIdentity,
   resolveUpdateCandidateStatePath,
 } from "./update-candidate-paths.js";
@@ -70,5 +71,18 @@ describe("Windows extended-length candidate state projection", () => {
     expect(projected).toBe(path.join(CANARY_ROOT, AGENT_RELATIVE));
     expect(path.relative(CANARY_ROOT, projected)).toBe(AGENT_RELATIVE);
     expectSafeProjection(projected);
+  });
+});
+
+describe("Windows candidate avatar projection", () => {
+  it("resolves a drive-less rooted avatar on the workspace drive, not the process drive", () => {
+    vi.spyOn(process, "cwd").mockReturnValue(String.raw`D:\work`);
+    const workspace = String.raw`C:\Users\me\clawd`;
+    const candidateWorkspace = path.join(CANARY_ROOT, "workspace", "main");
+    const projected = resolveUpdateCandidateAvatar(workspace, String.raw`\Users\me\clawd\a.png`);
+    expect(projected).toBe(String.raw`.\a.png`);
+    expect(isPathInside(candidateWorkspace, path.resolve(candidateWorkspace, projected))).toBe(
+      true,
+    );
   });
 });
