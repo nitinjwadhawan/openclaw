@@ -293,30 +293,12 @@ export function resolveReleaseNpmCommand(
   return resolveNpmRunner({ ...params, npmArgs: args });
 }
 
-function execNpm(
-  args: string[],
-  options: {
-    cwd?: string;
-    encoding: BufferEncoding;
-    env?: NodeJS.ProcessEnv;
-    maxBuffer?: number;
-    stdio: "inherit" | ["ignore", "pipe", "pipe"];
-  },
-): string {
+function execNpm(args: string[], options: Parameters<typeof runReleaseCheckCommand>[1]): string {
   const invocation = resolveReleaseNpmCommand(args, { env: options.env ?? process.env });
   return runReleaseCheckCommand(invocation, options);
 }
 
-function execPnpm(
-  args: string[],
-  options: {
-    cwd?: string;
-    encoding: BufferEncoding;
-    env?: NodeJS.ProcessEnv;
-    maxBuffer?: number;
-    stdio: "inherit" | ["ignore", "pipe", "pipe"];
-  },
-): string {
+function execPnpm(args: string[], options: Parameters<typeof runReleaseCheckCommand>[1]): string {
   const invocation = resolvePnpmRunner({ env: options.env ?? process.env, pnpmArgs: args });
   return runReleaseCheckCommand(invocation, options);
 }
@@ -815,21 +797,14 @@ export function writePackedBundledPluginActivationConfig(homeDir: string): void 
       {
         agents: {
           defaults: {
-            model: { primary: "openai/gpt-5.6-luna" },
+            models: {
+              "openai/*": { agentRuntime: { id: "openclaw" } },
+            },
           },
         },
         channels: {
           telegram: {
             enabled: true,
-          },
-        },
-        models: {
-          providers: {
-            openai: {
-              apiKey: "sk-openclaw-release-check",
-              baseUrl: "https://api.openai.com/v1",
-              models: [],
-            },
           },
         },
         plugins: {
@@ -902,24 +877,15 @@ function runPackedCliSmoke(params: {
   const trustedCmdPath = join(windowsRoot, "System32", "cmd.exe");
 
   for (const args of PACKED_CLI_SMOKE_COMMANDS) {
-    if (process.platform === "win32") {
-      runReleaseCheckCommand(
-        {
-          command: trustedCmdPath,
-          args: ["/d", "/s", "/c", buildCmdExeCommandLine(binaryPath, [...args])],
-          shell: false,
-          windowsVerbatimArguments: true,
-        },
-        {
-          cwd: params.cwd,
-          stdio: "inherit",
-          env,
-        },
-      );
-      continue;
-    }
     runReleaseCheckCommand(
-      { command: binaryPath, args: [...args], shell: false },
+      process.platform === "win32"
+        ? {
+            command: trustedCmdPath,
+            args: ["/d", "/s", "/c", buildCmdExeCommandLine(binaryPath, [...args])],
+            shell: false,
+            windowsVerbatimArguments: true,
+          }
+        : { command: binaryPath, args: [...args], shell: false },
       {
         cwd: params.cwd,
         stdio: "inherit",
