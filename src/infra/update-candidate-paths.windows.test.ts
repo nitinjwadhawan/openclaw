@@ -50,28 +50,17 @@ it.each([
   expect(isPathInside(CANARY_ROOT, projected)).toBe(true);
 });
 
-describe("Windows candidate avatar projection", () => {
-  it("resolves a drive-less rooted avatar on the workspace drive, not the process drive", () => {
-    vi.spyOn(process, "cwd").mockReturnValue(String.raw`D:\work`);
-    const workspace = String.raw`C:\Users\me\clawd`;
-    const candidateWorkspace = path.join(CANARY_ROOT, "workspace", "main");
-    const projected = resolveUpdateCandidateAvatar(workspace, String.raw`\Users\me\clawd\a.png`);
-    expect(projected).toBe(String.raw`.\a.png`);
-    expect(isPathInside(candidateWorkspace, path.resolve(candidateWorkspace, projected))).toBe(
-      true,
-    );
-  });
-
-  it.each([
-    [String.raw`\\?\C:\Users\me\clawd`, String.raw`C:\Users\me\clawd\a.png`, String.raw`.\a.png`],
-    [String.raw`C:\Users\me\clawd`, String.raw`..\clawd\a.png`, String.raw`.\a.png`],
-    [
-      String.raw`C:\Users\me\clawd`,
-      String.raw`\Users\me\main\a.png`,
-      String.raw`C:\Users\me\main\a.png`,
-    ],
-  ])("projects %s avatar %s as %s", (workspace, avatar, expected) => {
-    vi.spyOn(process, "cwd").mockReturnValue(String.raw`D:\work`);
-    expect(resolveUpdateCandidateAvatar(workspace, avatar)).toBe(expected);
-  });
+// The process sits on D: so a drive-less root must take the workspace drive.
+it.each([
+  [String.raw`C:\Users\me\clawd`, String.raw`\Users\me\clawd\a.png`, String.raw`.\a.png`],
+  [String.raw`\\?\C:\Users\me\clawd`, String.raw`C:\Users\me\clawd\a.png`, String.raw`.\a.png`],
+  [String.raw`C:\Users\me\clawd`, String.raw`..\clawd\a.png`, String.raw`.\a.png`],
+  [
+    String.raw`C:\Users\me\clawd`,
+    String.raw`\Users\me\main\a.png`,
+    String.raw`C:\Users\me\main\a.png`,
+  ],
+] as const)("projects Windows workspace %s avatar %s as %s", (workspace, avatar, expected) => {
+  vi.spyOn(process, "cwd").mockReturnValue(String.raw`D:\work`);
+  expect(resolveUpdateCandidateAvatar(workspace, avatar)).toBe(expected);
 });
