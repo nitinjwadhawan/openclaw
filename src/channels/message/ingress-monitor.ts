@@ -257,9 +257,11 @@ export function createChannelIngressMonitor<TRaw, TBody, TStoredPayload, TMetada
             admitDownstream?.();
             releaseStartCapacity();
           };
-          const settleDeferredLifecycle = async (settle: () => void | Promise<void>) => {
+          const settleLifecycle = async (settle: () => void | Promise<void>, deferred = true) => {
             handedOff = true;
-            deferredHandoff = true;
+            if (deferred) {
+              deferredHandoff = true;
+            }
             // Settlement can start before delivery returns its deferred handoff.
             trackDeferredClaim();
             try {
@@ -272,16 +274,7 @@ export function createChannelIngressMonitor<TRaw, TBody, TStoredPayload, TMetada
           const wrappedLifecycle: ChannelIngressMonitorLifecycle = {
             ...lifecycle,
             admission: "exclusive",
-            onAdopted: async () => {
-              handedOff = true;
-              trackDeferredClaim();
-              try {
-                await lifecycle.onAdopted();
-                requestDrain();
-              } finally {
-                settleDeferredClaim();
-              }
-            },
+            onAdopted: () => settleLifecycle(() => lifecycle.onAdopted(), false),
             onDeferred: () => markDeferredHandoff(lifecycle.onDeferred),
             onAdoptionFinalizing: () => {
               handedOff = true;
@@ -289,9 +282,9 @@ export function createChannelIngressMonitor<TRaw, TBody, TStoredPayload, TMetada
               trackDeferredClaim();
               lifecycle.onAdoptionFinalizing();
             },
-            onFailed: (error) => settleDeferredLifecycle(() => lifecycle.onFailed?.(error)),
-            onCancelled: () => settleDeferredLifecycle(() => lifecycle.onCancelled?.()),
-            onAbandoned: () => settleDeferredLifecycle(() => lifecycle.onAbandoned()),
+            onFailed: (error) => settleLifecycle(() => lifecycle.onFailed?.(error)),
+            onCancelled: () => settleLifecycle(() => lifecycle.onCancelled?.()),
+            onAbandoned: () => settleLifecycle(() => lifecycle.onAbandoned()),
           };
 
           // Adoption can complete before delivery returns; track both lifetimes so stop

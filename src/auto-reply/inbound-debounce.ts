@@ -228,8 +228,7 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
     const admission = flush.admission.catch(reportOnce);
     const completion = flush.completion.catch(reportOnce);
     activeCompletions.add(completion);
-    const cleanup = () => activeCompletions.delete(completion);
-    void completion.then(cleanup, cleanup);
+    void completion.then(() => activeCompletions.delete(completion));
     await Promise.race([admission, completion]);
   };
 
@@ -263,11 +262,10 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
 
   const enqueueKeyTask = (key: string, task: () => Promise<void>) => {
     const previous = keyChains.get(key) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(task);
+    const next = previous.then(task);
     const settled = next.catch(() => undefined);
     keyChains.set(key, settled);
-    const cleanup = () => untrackKeyTask(key, settled);
-    settled.then(cleanup, cleanup);
+    void settled.then(() => untrackKeyTask(key, settled));
     return next;
   };
 
