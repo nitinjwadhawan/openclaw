@@ -178,8 +178,9 @@ describe("Telegram durable ingress admission order", () => {
 
       forwardWindow.flush();
       // Ada's turn is only queued behind an active run; queued admission must
-      // release Bo without waiting for adoption.
-      await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2));
+      // release Bo without waiting for adoption. The first dispatch in a worker
+      // loads the reply runtime (~0.85 s locally), so allow the file's 5 s budget.
+      await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2), { timeout: 5_000 });
       expect(downstreamTurns.mock.calls.map(([turn]) => turn.RawBody)).toEqual([
         "Ada forward",
         "Bo reply",
@@ -244,7 +245,7 @@ describe("Telegram durable ingress admission order", () => {
       });
       forwardWindow.flush();
 
-      await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(downstreamTurns).toHaveBeenCalledTimes(2), { timeout: 5_000 });
       const [adaTurn, boTurn] = downstreamTurns.mock.calls.map(([turn]) => turn.RawBody);
       expect(adaTurn).toContain("Ada forward 1");
       expect(adaTurn).toContain("Ada forward 2");
