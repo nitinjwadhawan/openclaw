@@ -158,7 +158,7 @@ describe("Telegram durable ingress admission order", () => {
   });
 
   it("keeps a later sender behind a buffered forward until that batch reaches reply admission", async () => {
-    const { releaseHead, headFinished } = holdFirstDownstreamTurn();
+    const { releaseHead } = holdFirstDownstreamTurn();
     const resources = await createIngressMonitor(stateDir);
     activeResources.push(resources);
     const { monitor } = resources;
@@ -186,7 +186,6 @@ describe("Telegram durable ingress admission order", () => {
         "Bo reply",
       ]);
       releaseHead.resolve();
-      await headFinished.promise;
       await monitor.waitForDeferredClaims();
       await assertSpoolTombstoned({ stateDir, updateIds: [1_601, 1_602] });
       expect(runtimeErrors).toEqual([]);

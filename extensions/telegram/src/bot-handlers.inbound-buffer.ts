@@ -83,9 +83,7 @@ export function createTelegramInboundBuffers({
   const {
     mergeDispatchDedupeClaims,
     releaseDispatchDedupeClaims,
-    buildFailedProcessingResult,
     settleSpooledReplayParticipants,
-    spooledReplayOptions,
     processMessageWithReplyChain,
   } = message;
   const readConfig = createRuntimeConfigReader(cfg);
@@ -262,7 +260,7 @@ export function createTelegramInboundBuffers({
                     ...entries.map((entry) => entry.promptContextAmbientWatermark),
                   ),
                 ),
-                ...spooledReplayOptions(participants),
+                ...(participants.length > 0 ? { spooledReplay: true } : {}),
                 channelIngressResolvers: entries.flatMap((entry) => entry.channelIngressResolvers),
               },
               dispatchDedupeClaims,
@@ -274,14 +272,14 @@ export function createTelegramInboundBuffers({
             });
             settleSpooledReplayParticipants(participants, result);
           } catch (error) {
-            settleSpooledReplayParticipants(participants, buildFailedProcessingResult(error));
+            settleSpooledReplayParticipants(participants, { kind: "failed-retryable", error });
             throw error;
           }
         },
       }),
     onError: (error, items) => {
       const participants = spooledReplayParticipants(items);
-      settleSpooledReplayParticipants(participants, buildFailedProcessingResult(error));
+      settleSpooledReplayParticipants(participants, { kind: "failed-retryable", error });
       runtime.error?.(danger(`telegram debounce flush failed: ${String(error)}`));
       if (participants.length > 0) {
         return;
