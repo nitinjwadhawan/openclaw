@@ -248,6 +248,7 @@ it.for(["admitted", "failed", "account-stopped", "gateway-stopped"] as const)(
           counts: { tool: 0, block: 0, final: 1 },
         }));
         const preDispatchFailure = vi.fn();
+        const log = vi.fn();
         const sessionKey = "agent:qa:qa-channel:direct:peer";
         const turn = withPluginServiceScheduler(scheduler, () =>
           runPreparedChannelTurn({
@@ -263,12 +264,16 @@ it.for(["admitted", "failed", "account-stopped", "gateway-stopped"] as const)(
             recordInboundSession: record,
             runDispatch: dispatch,
             onPreDispatchFailure: preDispatchFailure,
+            log,
           }),
         );
         void turn.catch(() => {});
         try {
           expect(record).not.toHaveBeenCalled();
           expect(dispatch).not.toHaveBeenCalled();
+          expect(log).toHaveBeenCalledWith(
+            expect.objectContaining({ reason: "agent-database-preparation-pending" }),
+          );
           if (outcome === "admitted") {
             inspections.get("qa")!.resolve({ incompatible: [], indeterminate: [] });
             expect((await withinTest(turn, signal)).dispatched).toBe(true);
